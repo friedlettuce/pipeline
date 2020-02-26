@@ -11,37 +11,24 @@ int main(){
 
 	while(fgets(input, sizeof(input), stdin) != NULL){
 		instruction = atoi(input);
-		printf("Instruction: %d\n", instruction);
+		//printf("Instruction: %d\n", instruction);
+		print_byte(instruction);
+		printf("\n");
 	}
 
-	int tmp;
-	tmp = get_byte(tmp, tmp);
+	int tmp = get_byte(15, 1);
+	printf("\n");
 	print_byte(tmp);
 
 	return 0;
 }
 
-int get_byte(int src, int pos){
-	
-	int full = 2147483647;
-
-	return full;
-}
+int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
 
 void print_byte(int src){
-
-	int i, bit;
-
-	for(i = 31; i >= 0; ++i){
-
-		bit = 
-		printf("%d", src & 1);
-		src = src >> 1;
-		printf("(%d)", src);
-		
-		if(i+1 % 4 == 0 && i != 31)
+	for(int i = 31; i >= 0; --i){
+		printf("%d", (src >> i) & 1);
+		if(i%4==0 && i != 31 && i != 0)
 			printf(" ");
-		else if(i == 31)
-			printf("\n");
 	}
 }
