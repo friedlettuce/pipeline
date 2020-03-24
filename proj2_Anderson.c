@@ -11,7 +11,7 @@ typedef struct{
 int get_byte(int src, int pos);
 void print_byte(int src, int num);
 
-void print(int cycle, int pc, int *dataMem, int *regFile, state st);
+void print(int cycle, int pc, int *dataMem, int *regFile);
 
 void init_state(state* st);
 void set_state(state* st, int instruction);
@@ -25,26 +25,40 @@ char* get_name(int op, int funct);
 int main(){
 
 	int instruction[100], dataMem[32], regFile[32];
-	state pipe1, pipe2, pipe3, pipe4;
+	state ifid, idex, exmem, memwb;
 
-	int i;
+	int i, dataSeg = -1;
 	for(i = 0; i < 100; ++i){ instruction[i] = 0; }
-	for(i = 0; i < 32; ++i){ dataMem[i] = i; regFile[i] = i; }
+	for(i = 0; i < 32; ++i){ dataMem[i] = 0; regFile[i] = 0; }
 	
 	char input[1491]; // max word, instr char lines
 
 	i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
 		instruction[i++] = atoi(input);
-		
-		if(strcmp("NULL", get_name(get_code(instruction[i-1], "op"),
-		get_code(instruction[i-1], "funct"))) == 0){
-			set_state(&pipe1, instruction[i-1]);
-			print_state(&pipe1);
+
+		int nullop = strcmp("NULL", get_name(get_code(
+			instruction[i-1], "op"), get_code(
+			instruction[i-1], "funct")));
+		int noop = strcmp("noop", get_name(get_code(
+			instruction[i-1], "op"), get_code(
+			instruction[i-1], "funct")));
+
+		if(nullop != 0 && dataSeg == -1 && noop != 0){
+			set_state(&ifid, instruction[i-1]);
+			print_state(&ifid);
 			printf("\n");
+		}
+		else if(noop == 0){
+			++dataSeg;
+		}
+		else{
+			dataMem[dataSeg++] = instruction[i-1];
 		}
 	}
 	instruction[i] = -1;
+
+	print(1, 0, dataMem, regFile);
 	return 0;
 }
 
@@ -60,7 +74,7 @@ void print_byte(int src, int num){
 }
 */
 
-void print(int cycle, int pc, int *dataMem, int *regFile, state st){
+void print(int cycle, int pc, int *dataMem, int *regFile){
 
 	int i;
 
@@ -69,9 +83,9 @@ void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 	printf("\tPC = %d\n", pc);
 	
 	printf("\tData Memory:\n");
-	for(i = 0; i < 32; i+=2){
+	for(i = 0; i < 16; ++i){
 		printf("\t\tdataMem[%d] = %d\tdataMem[%d] = %d\n",
-				i, dataMem[i], i+1, dataMem[i+1]);
+				i, dataMem[i], i+16, dataMem[i+16]);
 	}
 	printf("\tRegisters:\n");
 	for(i = 0; i < 32; i+=2){
@@ -80,7 +94,7 @@ void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 	}
 
 	printf("\tIF/ID:\n");
-	printf("\t\tInstruction: %s\n", st.instruction);
+	printf("\t\tInstruction: NULL\n");
 	printf("\t\tPCPlus4: 0\n");
 
 	printf("\tID/EX:\n");
