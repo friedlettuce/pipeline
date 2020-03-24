@@ -27,12 +27,13 @@ int main(){
 	int instruction[100], dataMem[32], regFile[32];
 	state pipe1, pipe2, pipe3, pipe4;
 
-	for(int i = 0; i < 100; ++i){ instruction[i] = 0; }
-	for(int i = 0; i < 32; ++i){ dataMem[i] = i; regFile[i] = i; }
+	int i;
+	for(i = 0; i < 100; ++i){ instruction[i] = 0; }
+	for(i = 0; i < 32; ++i){ dataMem[i] = i; regFile[i] = i; }
 	
 	char input[1491]; // max word, instr char lines
 
-	int i = 0;
+	i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
 		instruction[i++] = atoi(input);
 		
@@ -61,17 +62,19 @@ void print_byte(int src, int num){
 
 void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 
+	int i;
+
 	printf("********************\n");
 	printf("State at the beginning of cycle %d\n", cycle);
 	printf("\tPC = %d\n", pc);
 	
 	printf("\tData Memory:\n");
-	for(int i = 0; i < 32; i+=2){
+	for(i = 0; i < 32; i+=2){
 		printf("\t\tdataMem[%d] = %d\tdataMem[%d] = %d\n",
 				i, dataMem[i], i+1, dataMem[i+1]);
 	}
 	printf("\tRegisters:\n");
-	for(int i = 0; i < 32; i+=2){
+	for(i = 0; i < 32; i+=2){
 		printf("\t\tregFile[%d] = %d\tregFile[%d] = %d\n",
 				i, regFile[i], i+1, regFile[i+1]);
 	}
