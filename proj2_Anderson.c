@@ -1,16 +1,35 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+typedef struct{
+
+	char* instruction;
+	int pcplus4;
+	
+	int branchTarget, readData1, readData2, immed;
+	char rs[3], rd[3], rt[3];
+
+	int aluResult, writeDataReg, writeReg;
+
+	int writeDataMem, writeDataALU;
+}state;
+
+void init_state(state* st);
 
 int get_byte(int src, int pos);
 void print_byte(int src);
 
-void print(int cycle, int pc, int *dataMem, int *regFile);
+void print(int cycle, int pc, int *dataMem, int *regFile, state st);
 
 int main(){
 
 	int cycle = 0, pc = 0;
 	int dataMem[32], regFile[32];
 	for(int i = 0; i < 32; ++i){ dataMem[i] = i; regFile[i] = i; }
+	state st;
+	init_state(&st);
+	strcpy(st.instruction, "Hello World!");
 
 	char input[1491]; // max word, instr char lines
 	int instruction;
@@ -22,7 +41,7 @@ int main(){
 		printf("\n");
 	}
 
-	print(1, 0, dataMem, regFile);
+	print(1, 0, dataMem, regFile, st);
 
 	return 0;
 }
@@ -37,7 +56,7 @@ void print_byte(int src){
 	}
 }
 
-void print(int cycle, int pc, int *dataMem, int *regFile){
+void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 
 	printf("********************\n");
 	printf("State at the beginning of cycle %d\n", cycle);
@@ -55,7 +74,7 @@ void print(int cycle, int pc, int *dataMem, int *regFile){
 	}
 
 	printf("\tIF/ID:\n");
-	printf("\t\tInstruction: \n");
+	printf("\t\tInstruction: %s\n", st.instruction);
 	printf("\t\tPCPlus4: 0\n");
 
 	printf("\tID/EX:\n");
@@ -82,4 +101,17 @@ void print(int cycle, int pc, int *dataMem, int *regFile){
 	printf("\t\twriteReg: NA\n");
 
 	printf("********************\n");
+}
+
+void init_state(state* st){
+
+	st->instruction = NULL;
+	st->pcplus4 = 0;
+	
+	st->branchTarget = st->readData1 = st->readData2 = st->immed = 0;
+	for(int i = 0; i < 3; ++i)
+		st->rs[i] = st->rd[i] = st->rt[i] = '\0';
+
+	st->aluResult = st->writeDataReg = st->writeReg = 0;
+	st->writeDataMem = st->writeDataALU = 0;
 }
