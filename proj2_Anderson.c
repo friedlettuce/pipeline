@@ -3,58 +3,61 @@
 #include <string.h>
 
 typedef struct{
-
-	char* instruction;
-	int pcplus4;
-	
-	int branchTarget, readData1, readData2, immed;
-	char rs[3], rd[3], rt[3];
-
-	int aluResult, writeDataReg, writeReg;
-
-	int writeDataMem, writeDataALU;
+	int instruction, immed;
+	char type;
+	int rs, rt, rd, branchTarget;
 }state;
 
-void init_state(state* st);
-
 int get_byte(int src, int pos);
-void print_byte(int src);
+void print_byte(int src, int num);
 
 void print(int cycle, int pc, int *dataMem, int *regFile, state st);
 
+void init_state(state* st);
+void set_state(state* st, int instruction);
+void print_state(state* st);
+
+int get_code(int instruction, char* type);
+char get_type(int instruction);
+
+char* get_name(int op, int funct);
+
 int main(){
 
-	int cycle = 0, pc = 0;
-	int dataMem[32], regFile[32];
+	int instruction[100], dataMem[32], regFile[32];
+	state pipe1, pipe2, pipe3, pipe4;
+
+	for(int i = 0; i < 100; ++i){ instruction[i] = 0; }
 	for(int i = 0; i < 32; ++i){ dataMem[i] = i; regFile[i] = i; }
-	state st;
-	init_state(&st);
-	strcpy(st.instruction, "Hello World!");
-
+	
 	char input[1491]; // max word, instr char lines
-	int instruction;
 
+	int i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
-		instruction = atoi(input);
-		//printf("Instruction: %d\n", instruction);
-		print_byte(instruction);
-		printf("\n");
+		instruction[i++] = atoi(input);
+		
+		if(strcmp("NULL", get_name(get_code(instruction[i-1], "op"),
+		get_code(instruction[i-1], "funct"))) == 0){
+			set_state(&pipe1, instruction[i-1]);
+			print_state(&pipe1);
+			printf("\n");
+		}
 	}
-
-	print(1, 0, dataMem, regFile, st);
-
+	instruction[i] = -1;
 	return 0;
 }
 
 int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
 
-void print_byte(int src){
-	for(int i = 31; i >= 0; --i){
+/*
+void print_byte(int src, int num){
+	for(int i = 31 - (31 - (num-1)); i >= 0; --i){
 		printf("%d", (src >> i) & 1);
 		if(i%4==0 && i != 31 && i != 0)
 			printf(" ");
 	}
 }
+*/
 
 void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 
@@ -104,14 +107,75 @@ void print(int cycle, int pc, int *dataMem, int *regFile, state st){
 }
 
 void init_state(state* st){
+	st->instruction = st->immed = 0;
+	st->type = 0;
+	st->rs = st->rt = st->rd = st->branchTarget = 0;
+}
 
-	st->instruction = NULL;
-	st->pcplus4 = 0;
-	
-	st->branchTarget = st->readData1 = st->readData2 = st->immed = 0;
-	for(int i = 0; i < 3; ++i)
-		st->rs[i] = st->rd[i] = st->rt[i] = '\0';
+void set_state(state* st, int instruction){
+	if(get_code(instruction, "op") != 0)
+		st->instruction = get_code(instruction, "op");
+	else
+		st->instruction = get_code(instruction, "funct");
 
-	st->aluResult = st->writeDataReg = st->writeReg = 0;
-	st->writeDataMem = st->writeDataALU = 0;
+	st->immed = get_code(instruction, "immed");
+	st->type = get_type(instruction);
+	st->rs = get_code(instruction, "rs");
+	st->rt = get_code(instruction, "rt");
+	st->rd = get_code(instruction, "rd");
+	st->branchTarget = get_code(instruction, "targadd");
+}
+
+void print_state(state* st){
+	printf("Function: %s, ", get_name(st->instruction,
+				get_code(st->instruction, "funct")));
+	printf("Rs: %d, Rt: %d, Rd: %d\n", st->rs, st->rt, st->rd);
+	printf("Immed: %d, Branch Target: %d\n", st->immed, st->branchTarget);
+}
+
+int get_code(int instruction, char *type){
+	if(strcmp(type, "op") == 0)
+		return (instruction >> 26) & 63;
+	else if(strcmp(type, "rs") == 0)
+		return (instruction >> 21) & 31;
+	else if(strcmp(type, "rt") == 0)
+		return (instruction >> 16) & 31;
+	else if(strcmp(type, "rd") == 0)
+		return (instruction >> 11) & 31;
+	else if(strcmp(type, "shamt") == 0)
+		return (instruction >> 6) & 31;
+	else if(strcmp(type, "funct") == 0)
+		return instruction & 63;
+	else if(strcmp(type, "immed") == 0)
+		return instruction & 65535;
+	else if(strcmp(type, "targadd") == 0)
+		return instruction & 67108863;
+	else
+		return -1;
+}
+
+char get_type(int instruction){
+	if(get_code(instruction, "op") == 0)
+		return 'r';
+	else if(get_code(instruction, "op") == 2)
+		return 'j';
+	else
+		return 'i';
+}
+
+char* get_name(int op, int funct){
+	switch(op){
+		case 32:return "add";
+		case 34:return "sub";
+		case 35:return "lw";
+		case 43:return "sw";
+		case 12:return "andi";
+		case 13:return "ori";
+		case 5:	return "bne";
+		case 1:	return "halt";
+		case 0:	if(funct == 0)
+				return "noop";
+			return "sll";
+	}
+	return "NULL";
 }
