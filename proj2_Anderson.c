@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct{
 	int instruction, immed;
@@ -13,8 +14,13 @@ void print_byte(int src, int num);
 void print(int cycle, int pc, int *dataMem, int *regFile);
 
 void init_state(state* st);
+void set_state(state* st, int instruction);
+void print_state(state* st);
 
-int get_op(int instruction);
+int get_code(int instruction, char* type);
+char get_type(int instruction);
+
+char* get_name(int op, int funct);
 
 int main(){
 
@@ -30,25 +36,22 @@ int main(){
 	int i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
 		instruction[i++] = atoi(input);
+		
+		if(strcmp("NULL", get_name(get_code(instruction[i-1], "op"),
+		get_code(instruction[i-1], "funct"))) == 0){
+			set_state(&pipe1, instruction[i-1]);
+			print_state(&pipe1);
+			printf("\n");
+		}
 	}
 	instruction[i] = -1;
-
-	for(int i = 0; i < 100; ++i){
-		if(instruction[i] == -1)
-			break;
-		print_byte(instruction[i]);
-		printf("\top code: ");
-		print_byte(get_op(instruction[i]));
-		printf("\n");
-	}
-
-	print(1, 0, dataMem, regFile);
 
 	return 0;
 }
 
 int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
 
+/*
 void print_byte(int src, int num){
 	for(int i = 31 - (31 - (num-1)); i >= 0; --i){
 		printf("%d", (src >> i) & 1);
@@ -56,6 +59,7 @@ void print_byte(int src, int num){
 			printf(" ");
 	}
 }
+*/
 
 void print(int cycle, int pc, int *dataMem, int *regFile){
 
@@ -110,8 +114,70 @@ void init_state(state* st){
 	st->rs = st->rt = st->rd = st->branchTarget = 0;
 }
 
-int get_op(int instruction){
-	return (instruction >> 26) & 63;
+void set_state(state* st, int instruction){
+	if(get_code(instruction, "op") != 0)
+		st->instruction = get_code(instruction, "op");
+	else
+		st->instruction = get_code(instruction, "funct");
+
+	st->immed = get_code(instruction, "immed");
+	st->type = get_type(instruction);
+	st->rs = get_code(instruction, "rs");
+	st->rt = get_code(instruction, "rt");
+	st->rd = get_code(instruction, "rd");
+	st->branchTarget = get_code(instruction, "targadd");
 }
 
+void print_state(state* st){
+	printf("Function: %s, ", get_name(st->instruction,
+				get_code(st->instruction, "funct")));
+	printf("Rs: %d, Rt: %d, Rd: %d\n", st->rs, st->rt, st->rd);
+	printf("Immed: %d, Branch Target: %d\n", st->immed, st->branchTarget);
+}
 
+int get_code(int instruction, char *type){
+	if(strcmp(type, "op") == 0)
+		return (instruction >> 26) & 63;
+	else if(strcmp(type, "rs") == 0)
+		return (instruction >> 21) & 31;
+	else if(strcmp(type, "rt") == 0)
+		return (instruction >> 16) & 31;
+	else if(strcmp(type, "rd") == 0)
+		return (instruction >> 11) & 31;
+	else if(strcmp(type, "shamt") == 0)
+		return (instruction >> 6) & 31;
+	else if(strcmp(type, "funct") == 0)
+		return instruction & 63;
+	else if(strcmp(type, "immed") == 0)
+		return instruction & 65535;
+	else if(strcmp(type, "targadd") == 0)
+		return instruction & 67108863;
+	else
+		return -1;
+}
+
+char get_type(int instruction){
+	if(get_code(instruction, "op") == 0)
+		return 'r';
+	else if(get_code(instruction, "op") == 2)
+		return 'j';
+	else
+		return 'i';
+}
+
+char* get_name(int op, int funct){
+	switch(op){
+		case 32:return "add";
+		case 34:return "sub";
+		case 35:return "lw";
+		case 43:return "sw";
+		case 12:return "andi";
+		case 13:return "ori";
+		case 5:	return "bne";
+		case 1:	return "halt";
+		case 0:	if(funct == 0)
+				return "noop";
+			return "sll";
+	}
+	return "NULL";
+}
