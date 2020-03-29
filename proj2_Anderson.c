@@ -3,18 +3,47 @@
 #include <string.h>
 
 typedef struct{
-	int instruction, immed;
+	int instruction, immed, rs, rt, rd, branchTarg;
 	char type;
-	int rs, rt, rd, branchTarget;
+}instruction;
+
+typedef struct{
+	instruction instr;
+	int pc4;
+}ifid;
+typedef struct{
+	instruction instr;
+	int pc4, branchTarg, rs, rt, rd;
+	int readData1, readData2, immed;
+}idex;
+typedef struct{
+	int instruction;
+	int aluResult;
+	int writeData, writeReg;
+}exmem;
+typedef struct{
+	int instruction;
+	int wMem, wALU, wReg;
+}memwb;
+
+typedef struct{
+	ifid regIfid;
+	idex regIdex;
+	exmem regExmem;
+	memwb regMemwb;
 }state;
+
+typedef struct{
+	int pc, branchTarg;
+	state st;
+}bPredictor;
 
 int get_byte(int src, int pos);
 void print_byte(int src, int num);
 
 void print(int cycle, int pc, int *dataMem, int *regFile);
 
-void init_state(state* st);
-void set_state(state* st, int instruction);
+void init_instr(instruction* instr);
 void print_state(state* st);
 
 int get_code(int instruction, char* type);
@@ -24,28 +53,28 @@ char* get_name(int op, int funct);
 
 int main(){
 
-	int instruction[100], dataMem[32], regFile[32];
-	state ifid, idex, exmem, memwb;
+	int instructions[100], dataMem[32], regFile[32], bPredictor[100];
+	state preCycle, postCycle;
 
 	int i, dataSeg = -1;
-	for(i = 0; i < 100; ++i){ instruction[i] = 0; }
+	for(i = 0; i < 100; ++i){ instructions[i] = 0; }
 	for(i = 0; i < 32; ++i){ dataMem[i] = 0; regFile[i] = 0; }
 	
 	char input[1491]; // max word, instr char lines
 
 	i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
-		instruction[i++] = atoi(input);
+		instructions[i++] = atoi(input);
 
 		int nullop = strcmp("NULL", get_name(get_code(
-			instruction[i-1], "op"), get_code(
-			instruction[i-1], "funct")));
+			instructions[i-1], "op"), get_code(
+			instructions[i-1], "funct")));
 		int noop = strcmp("noop", get_name(get_code(
-			instruction[i-1], "op"), get_code(
-			instruction[i-1], "funct")));
+			instructions[i-1], "op"), get_code(
+			instructions[i-1], "funct")));
 
 		if(nullop != 0 && dataSeg == -1 && noop != 0){
-			set_state(&ifid, instruction[i-1]);
+			set_state(&ifid, instructions[i-1]);
 			print_state(&ifid);
 			printf("\n");
 		}
@@ -53,10 +82,10 @@ int main(){
 			++dataSeg;
 		}
 		else{
-			dataMem[dataSeg++] = instruction[i-1];
+			dataMem[dataSeg++] = instructions[i-1];
 		}
 	}
-	instruction[i] = -1;
+	instructions[i] = -1;
 
 	print(1, 0, dataMem, regFile);
 	return 0;
@@ -123,24 +152,10 @@ void print(int cycle, int pc, int *dataMem, int *regFile){
 	printf("********************\n");
 }
 
-void init_state(state* st){
-	st->instruction = st->immed = 0;
-	st->type = 0;
-	st->rs = st->rt = st->rd = st->branchTarget = 0;
-}
-
-void set_state(state* st, int instruction){
-	if(get_code(instruction, "op") != 0)
-		st->instruction = get_code(instruction, "op");
-	else
-		st->instruction = get_code(instruction, "funct");
-
-	st->immed = get_code(instruction, "immed");
-	st->type = get_type(instruction);
-	st->rs = get_code(instruction, "rs");
-	st->rt = get_code(instruction, "rt");
-	st->rd = get_code(instruction, "rd");
-	st->branchTarget = get_code(instruction, "targadd");
+void init_instr(instruction* instr){
+	instr->instr = instr->immed = 0;
+	instr->type = 0;
+	instr->rs = instr->rt = instr->rd = instr->branchTarget = 0;
 }
 
 void print_state(state* st){
@@ -196,3 +211,16 @@ char* get_name(int op, int funct){
 	}
 	return "NULL";
 }
+
+char* get_reg(char regNum){
+	if(regNum == 0)
+		return "$0";
+	if(regNum < 16)
+		return "$t" + regNum;
+	return "$s" + regNum;
+}
+
+int get_reg(char* regName){
+	if(strcmp(regName, "$0") == 0)
+		return 0;
+} 
