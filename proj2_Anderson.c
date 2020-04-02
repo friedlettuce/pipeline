@@ -38,18 +38,21 @@ typedef struct{
 	state st;
 }bPredictor;
 
-int get_byte(int src, int pos);
-void print_byte(int src, int num);
+// int get_byte(int src, int pos);
+// void print_byte(int src, int num);
 
 void print(int cycle, int pc, int *dataMem, int *regFile);
 
 void init_instr(instruction* instr);
-void print_state(state* st);
+// void print_state(state* st);
 
 int get_code(int instruction, char* type);
 char get_type(int instruction);
 
 char* get_name(int op, int funct);
+
+char* get_regName(char regNum);
+int get_regNum(char* regName);
 
 int main(){
 
@@ -65,18 +68,17 @@ int main(){
 	i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
 		instructions[i++] = atoi(input);
-
+		/*
 		int nullop = strcmp("NULL", get_name(get_code(
 			instructions[i-1], "op"), get_code(
 			instructions[i-1], "funct")));
 		int noop = strcmp("noop", get_name(get_code(
 			instructions[i-1], "op"), get_code(
 			instructions[i-1], "funct")));
+		}
+		
+		if(dataSeg == -1 && nullop != 0){
 
-		if(nullop != 0 && dataSeg == -1 && noop != 0){
-			set_state(&ifid, instructions[i-1]);
-			print_state(&ifid);
-			printf("\n");
 		}
 		else if(noop == 0){
 			++dataSeg;
@@ -84,6 +86,7 @@ int main(){
 		else{
 			dataMem[dataSeg++] = instructions[i-1];
 		}
+		*/
 	}
 	instructions[i] = -1;
 
@@ -91,7 +94,7 @@ int main(){
 	return 0;
 }
 
-int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
+// int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
 
 /*
 void print_byte(int src, int num){
@@ -153,17 +156,19 @@ void print(int cycle, int pc, int *dataMem, int *regFile){
 }
 
 void init_instr(instruction* instr){
-	instr->instr = instr->immed = 0;
+	instr->instruction = instr->immed = 0;
 	instr->type = 0;
-	instr->rs = instr->rt = instr->rd = instr->branchTarget = 0;
+	instr->rs = instr->rt = instr->rd = instr->branchTarg = 0;
 }
 
+/*
 void print_state(state* st){
 	printf("Function: %s, ", get_name(st->instruction,
 				get_code(st->instruction, "funct")));
 	printf("Rs: %d, Rt: %d, Rd: %d\n", st->rs, st->rt, st->rd);
 	printf("Immed: %d, Branch Target: %d\n", st->immed, st->branchTarget);
 }
+*/
 
 int get_code(int instruction, char *type){
 	if(strcmp(type, "op") == 0)
@@ -212,7 +217,7 @@ char* get_name(int op, int funct){
 	return "NULL";
 }
 
-char* get_reg(char regNum){
+char* get_regName(char regNum){
 	if(regNum == 0)
 		return "$0";
 	if(regNum < 16)
@@ -220,7 +225,16 @@ char* get_reg(char regNum){
 	return "$s" + regNum;
 }
 
-int get_reg(char* regName){
+int get_regNum(char* regName){
 	if(strcmp(regName, "$0") == 0)
 		return 0;
+	
+	int reg = 0;
+
+	if(strncmp(regName, "$t", 2) == 0)
+		reg += 8;
+	else if(strncmp(regName, "$s", 2) == 0)
+		reg += 16;
+
+	return reg += (int)(regName[2]);
 } 
