@@ -3,7 +3,7 @@
 #include <string.h>
 
 typedef struct{
-	int instruction, immed, rs, rt, rd, branchTarg;
+	int code, immed, rs, rt, rd, branchTarg;
 	char type;
 }instruction;
 
@@ -17,12 +17,12 @@ typedef struct{
 	int readData1, readData2, immed;
 }idex;
 typedef struct{
-	int instruction;
+	instruction instr;
 	int aluResult;
 	int writeData, writeReg;
 }exmem;
 typedef struct{
-	int instruction;
+	instruction instr;
 	int wMem, wALU, wReg;
 }memwb;
 
@@ -38,18 +38,15 @@ typedef struct{
 	state st;
 }bPredictor;
 
-// int get_byte(int src, int pos);
-// void print_byte(int src, int num);
-
-void print(int cycle, int pc, int *dataMem, int *regFile);
+void print(state* st, int cycle, int pc, int *dataMem, int *regFile);
 
 void init_instr(instruction* instr);
-// void print_state(state* st);
+void init_state(state* st);
 
 int get_code(int instruction, char* type);
 char get_type(int instruction);
 
-char* get_name(int op, int funct);
+char* get_name(int instr);
 
 char* get_regName(char regNum);
 int get_regNum(char* regName);
@@ -67,14 +64,11 @@ int main(){
 
 	i = 0;
 	while(fgets(input, sizeof(input), stdin) != NULL){
+		
 		instructions[i++] = atoi(input);
 		/*
-		int nullop = strcmp("NULL", get_name(get_code(
-			instructions[i-1], "op"), get_code(
-			instructions[i-1], "funct")));
-		int noop = strcmp("noop", get_name(get_code(
-			instructions[i-1], "op"), get_code(
-			instructions[i-1], "funct")));
+		int nullop = strcmp("NULL", get_name(atoi(input)));
+		int noop = strcmp("noop", get_name(atoi(input)));
 		}
 		
 		if(dataSeg == -1 && nullop != 0){
@@ -90,23 +84,11 @@ int main(){
 	}
 	instructions[i] = -1;
 
-	print(1, 0, dataMem, regFile);
+	print(&preCycle, 1, 0, dataMem, regFile);
 	return 0;
 }
 
-// int get_byte(int src, int pos){	return (src >> (4*(pos-1))) & 15; }
-
-/*
-void print_byte(int src, int num){
-	for(int i = 31 - (31 - (num-1)); i >= 0; --i){
-		printf("%d", (src >> i) & 1);
-		if(i%4==0 && i != 31 && i != 0)
-			printf(" ");
-	}
-}
-*/
-
-void print(int cycle, int pc, int *dataMem, int *regFile){
+void print(state* st, int cycle, int pc, int *dataMem, int *regFile){
 
 	int i;
 
@@ -126,49 +108,57 @@ void print(int cycle, int pc, int *dataMem, int *regFile){
 	}
 
 	printf("\tIF/ID:\n");
-	printf("\t\tInstruction: NULL\n");
-	printf("\t\tPCPlus4: 0\n");
+	printf("\t\tInstruction: %s\n", get_name(st->regIfid.instr.code));
+	printf("\t\tPCPlus4: %d\n", st->regIfid.pc4);
 
 	printf("\tID/EX:\n");
-	printf("\t\tInstruction: NA\n");
-	printf("\t\tPCPlus4: NA\n");
-	printf("\t\tbranchTarget: NA\n");
-	printf("\t\treadData1: NA\n");
-	printf("\t\treadData2: NA\n");
-	printf("\t\timmed: NA\n");
-	printf("\t\trs: NA\n");
-	printf("\t\trt: NA\n");
-	printf("\t\trd: NA\n");
+	printf("\t\tInstruction: %s\n", get_name(st->regIdex.instr.code));
+	printf("\t\tPCPlus4: %d\n", st->regIdex.pc4);
+	printf("\t\tbranchTarget: %d\n", st->regIdex.branchTarg);
+	printf("\t\treadData1: %d\n", st->regIdex.readData1);
+	printf("\t\treadData2: %d\n", st->regIdex.readData2);
+	printf("\t\timmed: %d\n", st->regIdex.immed);
+	printf("\t\trs: %d\n", st->regIdex.rs);
+	printf("\t\trt: %d\n", st->regIdex.rt);
+	printf("\t\trd: %d\n", st->regIdex.rd);
 
 	printf("\tEX/MEM\n");
-	printf("\t\tInstruction: NA\n");
-	printf("\t\taluResult: NA\n");
-	printf("\t\twriteDataReg: NA\n");
-	printf("\t\twriteReg: NA\n");
+	printf("\t\tInstruction: %s\n", get_name(st->regExmem.instr.code));
+	printf("\t\taluResult: %d\n", st->regExmem.aluResult);
+	printf("\t\twriteDataReg: %d\n", st->regExmem.writeData);
+	printf("\t\twriteReg: %d\n", st->regExmem.writeReg);
 
 	printf("\tMEM/WB\n");
-	printf("\t\tInstruction: NA\n");
-	printf("\t\twriteDataMem: NA\n");
-	printf("\t\twriteDataALU: NA\n");
-	printf("\t\twriteReg: NA\n");
+	printf("\t\tInstruction: %s\n", get_name(st->regMemwb.instr.code));
+	printf("\t\twriteDataMem: %d\n", st->regMemwb.wMem);
+	printf("\t\twriteDataALU: %d\n", st->regMemwb.wALU);
+	printf("\t\twriteReg: %d\n", st->regMemwb.wReg);
 
 	printf("********************\n");
 }
 
 void init_instr(instruction* instr){
-	instr->instruction = instr->immed = 0;
+	instr->code = instr->immed = 0;
 	instr->type = 0;
 	instr->rs = instr->rt = instr->rd = instr->branchTarg = 0;
 }
+void init_state(state* st){
+	
+	init_instr(&st->regIfid.instr);
+	st->regIfid.pc4 = 0;
 
-/*
-void print_state(state* st){
-	printf("Function: %s, ", get_name(st->instruction,
-				get_code(st->instruction, "funct")));
-	printf("Rs: %d, Rt: %d, Rd: %d\n", st->rs, st->rt, st->rd);
-	printf("Immed: %d, Branch Target: %d\n", st->immed, st->branchTarget);
+	init_instr(&st->regIdex.instr);
+	st->regIdex.pc4 = st->regIdex.branchTarg = st->regIdex.rs = 0;
+	st->regIdex.rt = st->regIdex.rd = st->regIdex.readData1 = 0;
+	st->regIdex.readData2 = st->regIdex.immed = 0;
+	
+	init_instr(&st->regExmem.instr);
+	st->regExmem.aluResult = st->regExmem.writeData = 0;
+	st->regExmem.writeReg = 0;
+	
+	init_instr(&st->regMemwb.instr);
+	st->regMemwb.wMem = st->regMemwb.wALU = st->regMemwb.wReg = 0;
 }
-*/
 
 int get_code(int instruction, char *type){
 	if(strcmp(type, "op") == 0)
@@ -200,8 +190,8 @@ char get_type(int instruction){
 		return 'i';
 }
 
-char* get_name(int op, int funct){
-	switch(op){
+char* get_name(int instr){
+	switch(get_code(instr, "op")){
 		case 32:return "add";
 		case 34:return "sub";
 		case 35:return "lw";
@@ -210,7 +200,7 @@ char* get_name(int op, int funct){
 		case 13:return "ori";
 		case 5:	return "bne";
 		case 1:	return "halt";
-		case 0:	if(funct == 0)
+		case 0:	if(get_code(instr, "funct") == 0)
 				return "noop";
 			return "sll";
 	}
