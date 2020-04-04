@@ -138,20 +138,32 @@ int main(){
 		preCycle.regMemwb.instr.funct, preCycle.regMemwb.instr.shamt));
 		
 		print(&preCycle, pc / 4, pc, dataMem, regFile);
-		regFile[postCycle.regMemwb.wReg] = postCycle.regMemwb.wALU;
+		
 
-		if(ifid == 1){
+		if(ifid != 0){
+			ifid = strcmp("halt", get_name(
+			instructions[instr_count].op,
+			instructions[instr_count].funct,
+			instructions[instr_count].shamt));
+		
 			push_ifid(&postCycle.regIfid, pc,
 				&instructions[instr_count++]);
+		}
+		else{
+			instruction tmp;
+			init_instr(&tmp);
+			push_ifid(&postCycle.regIfid, pc, &tmp);
 		}
 
 		if(idex == 1)
 			push_idex(&preCycle.regIfid, &postCycle.regIdex, regFile);
 
-		if(exmem == 1)
+		if(exmem == 1){
+			// Update data memory here
 			push_exmem(&preCycle.regIdex, &postCycle.regExmem, regFile);
-
+		}
 		if(memwb == 1){
+			regFile[postCycle.regMemwb.wReg] = postCycle.regMemwb.wALU;
 			push_memwb(&preCycle.regExmem, &postCycle.regMemwb);
 		}
 		copy_state(&preCycle, &postCycle);
@@ -439,8 +451,15 @@ void push_ifid(ifid* regIfid, int pc, instruction* instr){
 }
 
 void push_idex(ifid* regIfid, idex* regIdex, int* regFile){
+	
 	copy_instr(&regIdex->instr, &regIfid->instr);
+	
 	regIdex->pc4 = regIfid->pc4;
+	regIdex->readData1 = 0;
+	regIdex->readData2 = 0;
+	regIdex->rs = 0;
+	regIdex->rt = 0;
+	regIdex->rd = 0;
 	
 	if(regIdex->instr.type == 'r'){
 		regIdex->rs = regIfid->instr.rs;
@@ -452,9 +471,9 @@ void push_idex(ifid* regIfid, idex* regIdex, int* regFile){
 	if(regIdex->instr.type == 'i'){
 		regIdex->rs = regIfid->instr.rs;
 		regIdex->rt = regIfid->instr.rt;
-		regIdex->rd = 0;
 		regIdex->readData1 = regFile[regIdex->rs];
 	}
+	
 	regIdex->immed = regIdex->instr.immed;
 	regIdex->branchTarg = (regIdex->instr.immed * 4) + regIdex->pc4;
 }
@@ -463,6 +482,8 @@ void push_exmem(idex* regIdex, exmem* regExmem, int* regFile){
 	copy_instr(&regExmem->instr, &regIdex->instr);
 	
 	regExmem->aluResult = 0;
+	regExmem->writeData = 0;
+	regExmem->writeReg = 0;
 
 	if(regExmem->instr.type == 'i'){
 		regExmem->writeReg = regIdex->instr.rt;
