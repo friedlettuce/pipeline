@@ -54,13 +54,18 @@ int get_regNum(char* regName);
 
 void print_instruction(instruction* instr);
 
+void copy_ifid(ifid* dest, ifid* input);
 void copy_state(state* dest, state* input);
 void copy_instr(instruction* dest, instruction* input);
 
 void push_ifid(ifid* regIfid, int pc, instruction* instr);
 void push_idex(ifid* regIfid, idex* regIdex, int* regFile);
-void push_exmem(idex* regIdex, exmem* regExmem, int* regFile);
+void push_exmem(idex* regIdex, exmem* regExmem, int* regFile,
+int forward, int aluR);
 int push_memwb(exmem* regExmem, memwb* regMemwb);
+
+int check_hazards(state* st);
+int check_forwards(state* st);
 
 int main(){
 
@@ -109,13 +114,10 @@ int main(){
 		instructions[i].immed = get_code(code, "immed");
 		instructions[i].branchTarg = get_code(code, "targadd");
 		instructions[i].funct = get_code(code, "funct");
-
-		print_instruction(&instructions[i]);
 		++i;
 	}
 
 	int dataStart = i * 4;
-	printf("DS %d\n", dataStart);
 
 	int j = 0;
 	for(i = 0; i < 100; ++i){
@@ -128,20 +130,24 @@ int main(){
 	}
 
 	int pc = 0;
+	int cycle = 0;
+	int stalls = 0;
 	int end = -1;
 	int instr_count = 0;
-	int ifid, idex, exmem, memwb;
-	ifid = idex = exmem = memwb = 1;
+	int ifidF, idexF, exmemF, memwbF, stallF, forwardF;
+	ifidF = idexF = exmemF = memwbF = 1;
+	ifid tmpIfid;
 
 	do{
 		end = strcmp("halt", get_name(preCycle.regMemwb.instr.op,
 		preCycle.regMemwb.instr.funct, preCycle.regMemwb.instr.shamt));
 		
-		print(&preCycle, pc / 4, pc, dataMem, regFile);
-		
+		print(&preCycle, cycle, pc, dataMem, regFile);
 
-		if(ifid != 0){
-			ifid = strcmp("halt", get_name(
+		stallF = check_hazards(&preCycle);
+		
+		if(ifidF != 0 && stallF != 0){
+			ifidF = strcmp("halt", get_name(
 			instructions[instr_count].op,
 			instructions[instr_count].funct,
 			instructions[instr_count].shamt));
@@ -149,31 +155,62 @@ int main(){
 			push_ifid(&postCycle.regIfid, pc,
 				&instructions[instr_count++]);
 		}
-		else{
+		else if(stallF != 0){
 			instruction tmp;
 			init_instr(&tmp);
 			push_ifid(&postCycle.regIfid, pc, &tmp);
 		}
 
-		if(idex == 1)
-			push_idex(&preCycle.regIfid, &postCycle.regIdex, regFile);
+		if(idexF == 1 && stallF != 0){
+			push_idex(&preCycle.regIfid, &postCycle.regIdex,
+				regFile);
+		}
+		else{
+			instruction tmp;
+			init_instr(&tmp);
+			copy_ifid(&tmpIfid, &postCycle.regIfid);
+			copy_instr(&tmpIfid.instr, &tmp);
+			push_idex(&tmpIfid, &postCycle.regIdex, regFile);
+			stallF = 1;
+			++stalls;
+			pc -= 4;
+		}
 
-		if(exmem == 1){
-			// Update data memory here
-			push_exmem(&preCycle.regIdex, &postCycle.regExmem, regFile);
+		// Update data memory
+		if(postCycle.regExmem.instr.type == 'i' && 
+		postCycle.regExmem.instr.op == 43){
+			dataMem[(postCycle.regExmem.aluResult -
+			dataStart)/4] = postCycle.regExmem.writeData;
 		}
-		if(memwb == 1){
-			regFile[postCycle.regMemwb.wReg] = postCycle.regMemwb.wALU;
-			push_memwb(&preCycle.regExmem, &postCycle.regMemwb);
+
+		// Check for forwarding
+		forwardF = check_forwards(&preCycle);
+		int aluR = preCycle.regExmem.aluResult;
+
+		push_exmem(&preCycle.regIdex, &postCycle.regExmem,
+			regFile, forwardF, aluR);
+
+		// Update register file
+		int t = postCycle.regMemwb.instr.type == 'i' &&
+			postCycle.regMemwb.instr.op == 35;
+		if(t){
+			regFile[postCycle.regMemwb.wReg] =
+			dataMem[(postCycle.regMemwb.wALU - dataStart) / 4];
 		}
+		else if(postCycle.regMemwb.wReg != 0){
+			regFile[postCycle.regMemwb.wReg] =
+				postCycle.regMemwb.wALU;
+		}
+		push_memwb(&preCycle.regExmem, &postCycle.regMemwb);
+
 		copy_state(&preCycle, &postCycle);
-
 		pc += 4;
+		++cycle;
 	}while(end != 0);
 
 	printf("********************\n");
-	printf("Total number of cycles executed: %d\n", pc / 4);
-	printf("Total number of stalls: %d\n", 0);
+	printf("Total number of cycles executed: %d\n", cycle);
+	printf("Total number of stalls: %d\n", stalls);
 	printf("Total number of branches: %d\n", 0);
 	printf("Total number of mispredicted branches: %d\n", 0);
 
@@ -468,7 +505,7 @@ void push_idex(ifid* regIfid, idex* regIdex, int* regFile){
 		regIdex->readData1 = regFile[regIdex->rs];
 		regIdex->readData2 = regFile[regIdex->rt];
 	}
-	if(regIdex->instr.type == 'i'){
+	else if(regIdex->instr.type == 'i'){
 		regIdex->rs = regIfid->instr.rs;
 		regIdex->rt = regIfid->instr.rt;
 		regIdex->readData1 = regFile[regIdex->rs];
@@ -478,7 +515,8 @@ void push_idex(ifid* regIfid, idex* regIdex, int* regFile){
 	regIdex->branchTarg = (regIdex->instr.immed * 4) + regIdex->pc4;
 }
 
-void push_exmem(idex* regIdex, exmem* regExmem, int* regFile){
+void push_exmem(idex* regIdex, exmem* regExmem, int* regFile,
+int forward, int aluR){
 	copy_instr(&regExmem->instr, &regIdex->instr);
 	
 	regExmem->aluResult = 0;
@@ -487,35 +525,58 @@ void push_exmem(idex* regIdex, exmem* regExmem, int* regFile){
 
 	if(regExmem->instr.type == 'i'){
 		regExmem->writeReg = regIdex->instr.rt;
+		int rs;
+
+		// F1 = rs is forwarded
+		if(forward == 1)
+			rs = aluR;
+		else
+			rs = regFile[regIdex->rs];
 		
 		switch(regExmem->instr.op){ 
 			case 43:
-			case 35:regExmem->aluResult = regFile[regIdex->rs] +
+			case 35:regExmem->aluResult = rs +
 				regExmem->instr.immed;
 				break;
-			case 12:regExmem->aluResult = regFile[regIdex->rs] &
+			case 12:regExmem->aluResult = rs &
 				regExmem->instr.immed;
 				break;
-			case 13:regExmem->aluResult =
-				regExmem->instr.immed|regExmem->instr.rt;
+			case 13:regExmem->aluResult = rs |
+				regExmem->instr.immed;
 				break;
 			case 5: 
 				break;
 		}
 	}
 	else if(regExmem->instr.type == 'r'){
-		regExmem->writeData = regFile[regIdex->rt];
+		int rs, rt;
+		rs = regFile[regIdex->rs];
+		rt = regFile[regIdex->rt];
+
+		// F1 = rs is forwarded, F2 = rt forwarded, F3 both
+		if(forward == 1)
+			rs = aluR;
+		else if(forward == 2)
+			rt = aluR;
+		else if(forward == 3){
+			rs = aluR;
+			rt = aluR;
+		}
+
+		if(forward > 1 && forward < 4)
+			regExmem->writeData = aluR;
+		else
+			regExmem->writeData = regFile[regIdex->rt];
+
 		regExmem->writeReg = regIdex->rd;
 
 		switch(regExmem->instr.funct){
-			case 32:regExmem->aluResult = regFile[regIdex->rs] +
-				regFile[regIdex->rt];
+			case 32:regExmem->aluResult = rs + rt;
 				break;
-			case 34:regExmem->aluResult = regFile[regIdex->rs] -
-				regFile[regIdex->rt];
+			case 34:regExmem->aluResult = rs - rt;
 				break;
-			case 0:	regExmem->aluResult = regFile[regIdex->rs] <<
-				regExmem->instr.shamt;
+			case 0:	regExmem->aluResult = rs <<
+					regExmem->instr.shamt;
 				break;
 		}
 	}
@@ -528,4 +589,51 @@ int push_memwb(exmem* regExmem, memwb* regMemwb){
 	regMemwb->wALU = regExmem->aluResult;
 	regMemwb->wReg = regExmem->writeReg;
 	return 0;
+}
+
+int check_hazards(state* st){
+
+	if(st->regIdex.instr.type != 'i' || st->regIdex.instr.op != 35)
+		return 1;
+
+	int rs, rt;
+	rs = st->regIfid.instr.rs;
+	rt = st->regIfid.instr.rt;
+
+	if(st->regIfid.instr.type =='r'){
+		if(rs == st->regIdex.instr.rt || rt == st->regIdex.instr.rt)
+			return 0;
+		else
+			return 1;
+	}
+	else if(st->regIfid.instr.type =='i'){
+		if(rs == st->regIdex.instr.rt)
+			return 0;
+		else
+			return 1;
+	}
+	else
+		return 1;
+}
+
+int check_forwards(state* st){
+
+	int rs, rt, forward;
+	rs = st->regIdex.rs;
+	rt = st->regIdex.rt;
+	forward = 0;
+
+	if(st->regIdex.instr.type == 'r'){
+		if(rs == st->regExmem.writeReg)
+			forward = 1;
+		if(rt == st->regExmem.writeReg)
+			forward = 2;
+		if(rs == rt)
+			forward = 3;
+	}
+	else if(st->regIdex.instr.type == 'i'){
+		if(rs == st->regExmem.writeReg)
+			forward = 1;
+	}
+	return forward;
 }
